@@ -16,3 +16,18 @@ func (ur *UserRepository) Create(u *model.User) (*model.User, error) {
 	}
 	return u, nil
 }
+
+func (ur *UserRepository) FindByEmail(email string) (*model.User, error) {
+	user := model.User{}
+	if err := ur.store.db.QueryRow(
+		"SELECT * FROM users WHERE email = $1",
+		email,
+	).Scan(
+		&user.ID,
+		&user.Email,
+		&user.EncryptedPassword,
+	); err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
