@@ -1,35 +1,34 @@
-package store_test
+package teststore_test
 
 import (
 	"github.com/igogorek/http-rest-api-go/internal/app/model"
 	"github.com/igogorek/http-rest-api-go/internal/app/store"
+	"github.com/igogorek/http-rest-api-go/internal/app/store/teststore"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
 
 func TestUserRepository_Create(t *testing.T) {
-	st, teardown := store.TestStore(t, databaseURL)
-	defer teardown("users")
+	st := teststore.New()
 
-	user, err := st.User().Create(model.TestUser())
+	user := model.TestUser()
+	err := st.User().Create(user)
 
 	assert.NoError(t, err)
-	assert.NotNil(t, user)
+	assert.NotEmpty(t, user.ID)
+	assert.NotEmpty(t, user.EncryptedPassword)
 }
 
 func TestUserRepository_FindByEmail(t *testing.T) {
-	st, teardown := store.TestStore(t, databaseURL)
-	defer teardown("users")
+	st := teststore.New()
 
 	test_user := model.TestUser()
 
 	user, err := st.User().FindByEmail(test_user.Email)
-	assert.Error(t, err)
+	assert.EqualError(t, err, store.ErrRecordNotFound.Error())
 	assert.Nil(t, user)
 
-	created, err := st.User().Create(test_user)
-
-	if err != nil {
+	if err = st.User().Create(test_user); err != nil {
 		t.Fatal(err)
 	}
 
@@ -38,9 +37,10 @@ func TestUserRepository_FindByEmail(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t,
 		model.User{
-			ID:                created.ID,
-			Email:             created.Email,
-			EncryptedPassword: created.EncryptedPassword,
+			ID:                test_user.ID,
+			Email:             test_user.Email,
+			Password:          test_user.Password,
+			EncryptedPassword: test_user.EncryptedPassword,
 		},
 		*user,
 	)

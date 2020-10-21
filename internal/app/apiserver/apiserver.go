@@ -1,8 +1,10 @@
 package apiserver
 
 import (
+	"database/sql"
 	"github.com/gorilla/mux"
 	"github.com/igogorek/http-rest-api-go/internal/app/store"
+	"github.com/igogorek/http-rest-api-go/internal/app/store/sqlstore"
 	"github.com/sirupsen/logrus"
 	"io"
 	"net/http"
@@ -13,7 +15,7 @@ type APIServer struct {
 	config *Config
 	logger *logrus.Logger
 	router *mux.Router
-	store  *store.Store
+	store  store.Store
 }
 
 // New construct object of APIServer
@@ -64,11 +66,14 @@ func (s *APIServer) handleHello() http.HandlerFunc {
 }
 
 func (s *APIServer) configureStore() error {
-	st := store.New(s.config.Store)
-	if err := st.Open(); err != nil {
+	db, err := sql.Open("postgres", s.config.DatabaseURL)
+	if err != nil {
+		return err
+	}
+	if err := db.Ping(); err != nil {
 		return err
 	}
 
-	s.store = st
+	s.store = sqlstore.New(db)
 	return nil
 }

@@ -1,33 +1,34 @@
-package store
+package sqlstore
 
-import "github.com/igogorek/http-rest-api-go/internal/app/model"
+import (
+	"database/sql"
+	"github.com/igogorek/http-rest-api-go/internal/app/model"
+	"github.com/igogorek/http-rest-api-go/internal/app/store"
+)
 
 type UserRepository struct {
 	store *Store
 }
 
-func (ur *UserRepository) Create(u *model.User) (*model.User, error) {
+func (ur *UserRepository) Create(u *model.User) error {
 	if err := u.Validate(); err != nil {
-		return nil, err
+		return err
 	}
 
 	if err := u.BeforeCreate(); err != nil {
-		return nil, err
+		return err
 	}
 
-	if err := ur.store.db.QueryRow(
+	return ur.store.db.QueryRow(
 		"INSERT INTO users (email, encrypted_password) VALUES ($1, $2) RETURNING id",
 		u.Email,
 		u.EncryptedPassword,
-	).Scan(&u.ID); err != nil {
-		return nil, err
-	}
-
-	return u, nil
+	).Scan(&u.ID)
 }
 
 func (ur *UserRepository) FindByEmail(email string) (*model.User, error) {
 	user := model.User{}
+
 	if err := ur.store.db.QueryRow(
 		"SELECT * FROM users WHERE email = $1",
 		email,
@@ -36,7 +37,11 @@ func (ur *UserRepository) FindByEmail(email string) (*model.User, error) {
 		&user.Email,
 		&user.EncryptedPassword,
 	); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, store.ErrRecordNotFound
+		}
 		return nil, err
 	}
+
 	return &user, nil
 }
