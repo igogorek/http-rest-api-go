@@ -3,6 +3,8 @@ package apiserver
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/gorilla/sessions"
+	"github.com/igogorek/http-rest-api-go/internal/app/model"
 	"github.com/igogorek/http-rest-api-go/internal/app/store/teststore"
 	"github.com/stretchr/testify/assert"
 	"net/http"
@@ -11,7 +13,7 @@ import (
 )
 
 func TestServer_HandleUserCreate(t *testing.T) {
-	srv := newServer(teststore.New())
+	srv := newServer(teststore.New(), sessions.NewCookieStore([]byte("simple")))
 
 	testCases := []struct {
 		name         string
@@ -81,4 +83,66 @@ func TestServer_HandleUserCreate(t *testing.T) {
 		})
 	}
 
+}
+
+func TestServer_HandleSessionCreate(t *testing.T) {
+	store := teststore.New()
+	user := model.TestUser()
+
+	if err := store.User().Create(user); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := newServer(store, sessions.NewCookieStore([]byte("simple")))
+
+	testCases := []struct {
+		name     string
+		payload  interface{}
+		httpCode int
+	}{
+		{
+			name: "valid",
+			payload: map[string]string{
+				"email":    user.Email,
+				"password": user.Password,
+			},
+			httpCode: http.StatusOK,
+		},
+		{
+			name:     "invalid payload",
+			payload:  "invalid",
+			httpCode: http.StatusBadRequest,
+		},
+		{
+			name: "invalid email",
+			payload: map[string]string{
+				"email":    "invalid",
+				"password": user.Password,
+			},
+			httpCode: http.StatusUnauthorized,
+		},
+		{
+			name: "invalid password",
+			payload: map[string]string{
+				"email":    user.Email,
+				"password": "invalid",
+			},
+			httpCode: http.StatusUnauthorized,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			b := bytes.NewBuffer([]byte{})
+			if err := json.NewEncoder(b).Encode(tc.payload); err != nil {
+				t.Fatal(err)
+			}
+
+			request := httptest.NewRequest(http.MethodPost, "/sessions", b)
+			srv.ServeHTTP(rec, request)
+
+			assert.Equal(t, tc.httpCode, rec.Code)
+		})
+	}
 }

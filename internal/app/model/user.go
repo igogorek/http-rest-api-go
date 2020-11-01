@@ -43,6 +43,11 @@ func (u *User) Sanitize() {
 	u.Password = ""
 }
 
+func (u *User) ValidPassword(password string) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(u.EncryptedPassword), []byte(password))
+	return err == nil
+}
+
 func encryptString(s string) (string, error) {
 	res, err := bcrypt.GenerateFromPassword([]byte(s), bcrypt.MinCost)
 	if err != nil {
