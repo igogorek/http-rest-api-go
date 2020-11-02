@@ -2,8 +2,10 @@ package apiserver
 
 import (
 	"database/sql"
+	"github.com/gorilla/sessions"
 	"github.com/igogorek/http-rest-api-go/internal/app/store/sqlstore"
 	"net/http"
+	"os"
 )
 
 // Start function to start apiserver
@@ -14,8 +16,9 @@ func Start(config *Config) error {
 	}
 
 	store := sqlstore.New(db)
+	sessionStore := sessions.NewCookieStore([]byte(os.Getenv("APISERVER_SESSION_KEY")))
 
-	srv := newServer(store)
+	srv := newServer(store, sessionStore)
 
 	if err := srv.configureLogger(config.LogLevel); err != nil {
 		return err
