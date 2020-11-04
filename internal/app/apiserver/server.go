@@ -1,6 +1,7 @@
 package apiserver
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"github.com/gorilla/mux"
@@ -11,10 +12,18 @@ import (
 	"net/http"
 )
 
+const (
+	sessionName      = "apiserver-session"
+	sessionKeyUserId = "user_id"
+	ctxKeyUser       = iota
+)
+
 var (
 	errInvalidEmailOrPassword = errors.New("invalid email or password")
-	sessionName               = "apiserver-session"
+	errUnauthenticatedUser    = errors.New("unauthenticated user")
 )
+
+type ctxKey int8
 
 type server struct {
 	router       *mux.Router
@@ -133,7 +142,7 @@ func (s *server) handleSessionCreate() http.HandlerFunc {
 			return
 		}
 
-		session.Values["user_id"] = user.ID
+		session.Values[sessionKeyUserId] = user.ID
 		if err := session.Save(r, w); err != nil {
 			s.handleError(w, r, http.StatusInternalServerError, err)
 			return
@@ -141,4 +150,29 @@ func (s *server) handleSessionCreate() http.HandlerFunc {
 		s.respond(w, r, http.StatusOK, nil)
 	}
 
+}
+
+func (s *server) authenticateUser(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		session, err := s.sessionStore.Get(r, sessionName)
+		if err != nil {
+			s.handleError(w, r, http.StatusInternalServerError, err)
+			return
+		}
+
+		userId, ok := session.Values[sessionKeyUserId]
+		if !ok {
+			s.handleError(w, r, http.StatusUnauthorized, errUnauthenticatedUser)
+			return
+		}
+
+		user, err := s.store.User().Find(userId.(int))
+		if err != nil {
+			s.handleError(w, r, http.StatusUnauthorized, errUnauthenticatedUser)
+			return
+		}
+
+		userContext := context.WithValue(r.Context(), ctxKeyUser, user)
+		next.ServeHTTP(w, r.WithContext(userContext))
+	})
 }
