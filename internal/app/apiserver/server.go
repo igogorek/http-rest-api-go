@@ -19,6 +19,7 @@ const (
 )
 
 var (
+	errInternalError          = errors.New("internal error")
 	errInvalidEmailOrPassword = errors.New("invalid email or password")
 	errUnauthenticatedUser    = errors.New("unauthenticated user")
 )
@@ -48,6 +49,10 @@ func newServer(store store.Store, sessionStore sessions.Store) *server {
 func (s *server) configureRouter() {
 	s.router.HandleFunc("/users", s.handleUserCreate()).Methods(http.MethodPost)
 	s.router.HandleFunc("/sessions", s.handleSessionCreate()).Methods(http.MethodPost)
+
+	private := s.router.PathPrefix("/private").Subrouter()
+	private.Use(s.authenticateUser)
+	private.HandleFunc("/whoami", s.handleWhoami()).Methods(http.MethodGet)
 }
 
 func (s *server) configureLogger(logLevel string) error {
@@ -175,4 +180,15 @@ func (s *server) authenticateUser(next http.Handler) http.Handler {
 		userContext := context.WithValue(r.Context(), ctxKeyUser, user)
 		next.ServeHTTP(w, r.WithContext(userContext))
 	})
+}
+
+func (s *server) handleWhoami() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, ok := r.Context().Value(ctxKeyUser).(*model.User)
+		if !ok {
+			s.handleError(w, r, http.StatusInternalServerError, errInternalError)
+			return
+		}
+		s.respond(w, r, http.StatusOK, user)
+	}
 }
