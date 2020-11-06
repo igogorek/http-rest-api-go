@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
 	"github.com/igogorek/http-rest-api-go/internal/app/model"
@@ -13,9 +14,9 @@ import (
 )
 
 const (
-	sessionName      = "apiserver-session"
-	sessionKeyUserId = "user_id"
-	ctxKeyUser       = iota
+	sessionName             = "apiserver-session"
+	sessionKeyUserId        = "user_id"
+	ctxKeyUser       ctxKey = iota
 )
 
 var (
@@ -47,6 +48,7 @@ func newServer(store store.Store, sessionStore sessions.Store) *server {
 }
 
 func (s *server) configureRouter() {
+	s.router.Use(handlers.CORS(handlers.AllowedOrigins([]string{"*"})))
 	s.router.HandleFunc("/users", s.handleUserCreate()).Methods(http.MethodPost)
 	s.router.HandleFunc("/sessions", s.handleSessionCreate()).Methods(http.MethodPost)
 
