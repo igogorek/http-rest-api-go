@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/google/uuid"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
@@ -11,12 +12,16 @@ import (
 	"github.com/igogorek/http-rest-api-go/internal/app/store"
 	"github.com/sirupsen/logrus"
 	"net/http"
+	"time"
 )
 
 const (
-	sessionName             = "apiserver-session"
-	sessionKeyUserId        = "user_id"
-	ctxKeyUser       ctxKey = iota
+	sessionName      = "apiserver-session"
+	sessionKeyUserId = "user_id"
+)
+const (
+	ctxKeyUser ctxKey = iota
+	ctxRequestId
 )
 
 var (
@@ -48,6 +53,8 @@ func newServer(store store.Store, sessionStore sessions.Store) *server {
 }
 
 func (s *server) configureRouter() {
+	s.router.Use(s.addRequestId)
+	s.router.Use(s.logRequest)
 	s.router.Use(handlers.CORS(handlers.AllowedOrigins([]string{"*"})))
 	s.router.HandleFunc("/users", s.handleUserCreate()).Methods(http.MethodPost)
 	s.router.HandleFunc("/sessions", s.handleSessionCreate()).Methods(http.MethodPost)
@@ -94,6 +101,37 @@ func (s *server) respond(
 			s.logger.Error(err)
 		}
 	}
+}
+
+func (s *server) addRequestId(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		uuidStr := uuid.New().String()
+		w.Header().Set("X-Request-Id", uuidStr)
+		uidContext := context.WithValue(r.Context(), ctxRequestId, uuidStr)
+		next.ServeHTTP(w, r.WithContext(uidContext))
+	})
+}
+
+func (s *server) logRequest(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logger := s.logger.WithFields(logrus.Fields{
+			"remote_addr": r.RemoteAddr,
+			"request_id":  r.Context().Value(ctxRequestId),
+		})
+
+		logger.Infof("Starting request %s %s", r.Method, r.RequestURI)
+
+		start := time.Now()
+		codeRW := &ResponseWriter{w, http.StatusOK}
+		next.ServeHTTP(codeRW, r)
+
+		logger.Infof(
+			"request ended with (%d %s) in %v",
+			codeRW.code,
+			http.StatusText(codeRW.code),
+			time.Now().Sub(start),
+		)
+	})
 }
 
 func (s *server) handleUserCreate() http.HandlerFunc {
